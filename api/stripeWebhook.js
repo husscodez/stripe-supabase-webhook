@@ -23,6 +23,10 @@ async function getRawBody(readable) {
 export default async (req, res) => {
     try {
         console.log('Received POST request at webhook.');
+        console.log('STRIPE_SECRET_KEY:', process.env.STRIPE_SECRET_KEY);
+console.log('STRIPE_WEBHOOK_SECRET:', process.env.STRIPE_WEBHOOK_SECRET);
+console.log('SUPABASE_KEY:', process.env.SUPABASE_KEY);
+console.log('SUPABASE_URL:', process.env.SUPABASE_URL);
 
         // Ensure all environment variables are present
         if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET || !process.env.SUPABASE_KEY) {
