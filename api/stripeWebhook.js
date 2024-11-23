@@ -22,57 +22,76 @@ async function getRawBody(readable) {
 
 export default async (req, res) => {
     try {
-        if (req.method === 'POST') {
-            console.log('Received POST request at webhook.');
+        console.log('Received POST request at webhook.');
 
+        // Ensure all environment variables are present
+        if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET || !process.env.SUPABASE_KEY) {
+            console.error('Missing environment variables!');
+            res.status(500).send('Internal Server Error: Missing environment variables');
+            return;
+        }
+
+        if (req.method === 'POST') {
             const rawBody = await getRawBody(Readable.from(req));
             const sig = req.headers['stripe-signature'];
 
             console.log('Raw body:', rawBody);
             console.log('Stripe signature:', sig);
 
-            // Verify Stripe event
-            const event = stripe.webhooks.constructEvent(
-                rawBody,
-                sig,
-                process.env.STRIPE_WEBHOOK_SECRET
-            );
+            // Verify Stripe webhook signature
+            let event;
+            try {
+                event = stripe.webhooks.constructEvent(
+                    rawBody,
+                    sig,
+                    process.env.STRIPE_WEBHOOK_SECRET
+                );
+            } catch (err) {
+                console.error('Stripe signature verification failed:', err.message);
+                res.status(400).send(`Webhook Error: ${err.message}`);
+                return;
+            }
 
             console.log('Stripe event verified:', event.type);
 
-            // Handle specific event types
             if (event.type === 'payment_intent.succeeded') {
                 const paymentIntent = event.data.object;
                 console.log('Payment intent object:', paymentIntent);
 
                 // Send data to Supabase
-                const response = await fetch(
-                    'https://mvlqlgpeqieuayciriij.supabase.co/rest/v1/Payments',
-                    {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'apikey': process.env.SUPABASE_KEY,
-                        },
-                        body: JSON.stringify({
-                            payment_id: paymentIntent.id,
-                            amount: paymentIntent.amount,
-                            currency: paymentIntent.currency,
-                            status: paymentIntent.status,
-                        }),
+                try {
+                    const response = await fetch(
+                        'https://mvlqlgpeqieuayciriij.supabase.co/rest/v1/Payments',
+                        {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'apikey': process.env.SUPABASE_KEY,
+                            },
+                            body: JSON.stringify({
+                                payment_id: paymentIntent.id,
+                                amount: paymentIntent.amount,
+                                currency: paymentIntent.currency,
+                                status: paymentIntent.status,
+                            }),
+                        }
+                    );
+
+                    const responseText = await response.text();
+                    console.log('Supabase Response Status:', response.status);
+                    console.log('Supabase Response Body:', responseText);
+
+                    if (!response.ok) {
+                        console.error('Supabase Error:', response.status, responseText);
+                        throw new Error('Failed to insert payment into Supabase');
                     }
-                );
 
-                const responseText = await response.text();
-                console.log('Supabase Response Status:', response.status);
-                console.log('Supabase Response Body:', responseText);
-
-                if (!response.ok) {
-                    console.error('Supabase Error:', response.status, responseText);
-                    throw new Error('Failed to insert payment into Supabase');
+                    console.log('Payment successfully inserted into Supabase.');
+                } catch (err) {
+                    console.error('Error inserting into Supabase:', err.message);
+                    res.status(500).send(`Supabase Insert Error: ${err.message}`);
+                    return;
                 }
-
-                console.log('Payment successfully inserted into Supabase.');
             }
 
             res.status(200).send({ received: true });
