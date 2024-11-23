@@ -1,13 +1,30 @@
+import { Readable } from 'stream';
+import Stripe from 'stripe';
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+export const config = { api: { bodyParser: false } };
+
+async function getRawBody(readable) {
+    return new Promise((resolve, reject) => {
+        let data = '';
+        readable.on('data', (chunk) => {
+            data += chunk;
+        });
+        readable.on('end', () => {
+            resolve(data);
+        });
+        readable.on('error', (err) => {
+            reject(err);
+        });
+    });
+}
+
 export default async (req, res) => {
     try {
-        console.log('Received request:', req.method);
-
         if (req.method === 'POST') {
-            const rawBody = await buffer(req);
-            console.log('Raw body:', rawBody.toString());
-
+            const rawBody = await getRawBody(Readable.from(req));
             const sig = req.headers['stripe-signature'];
-            console.log('Signature:', sig);
 
             const event = stripe.webhooks.constructEvent(
                 rawBody,
@@ -19,7 +36,7 @@ export default async (req, res) => {
 
             if (event.type === 'payment_intent.succeeded') {
                 const paymentIntent = event.data.object;
-                console.log('Processing payment intent:', paymentIntent);
+                console.log('Payment intent:', paymentIntent);
 
                 const response = await fetch(
                     'https://mvlqlgpeqieuayciriij.supabase.co/rest/v1/Payments',
@@ -39,8 +56,7 @@ export default async (req, res) => {
                 );
 
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('Supabase Error:', response.status, errorText);
+                    console.error('Supabase Error:', response.status, await response.text());
                     throw new Error('Failed to insert payment into Supabase');
                 }
 
@@ -49,11 +65,10 @@ export default async (req, res) => {
 
             res.status(200).send({ received: true });
         } else {
-            console.log('Unsupported method:', req.method);
             res.status(405).send('Method Not Allowed');
         }
     } catch (err) {
         console.error('Error occurred:', err.message);
-        res.status(500).send(`Internal Server Error: ${err.message}`);
+        res.status(500).send(`Webhook Error: ${err.message}`);
     }
 };
