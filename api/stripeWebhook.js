@@ -22,14 +22,7 @@ async function getRawBody(readable) {
 
 export default async (req, res) => {
     try {
-        console.log('Received POST request at webhook.');
-        console.log('STRIPE_SECRET_KEY:', process.env.STRIPE_SECRET_KEY);
-console.log('STRIPE_WEBHOOK_SECRET:', process.env.STRIPE_WEBHOOK_SECRET);
-console.log('SUPABASE_KEY:', process.env.SUPABASE_KEY);
-console.log('SUPABASE_URL:', process.env.SUPABASE_URL);
-
-        // Ensure all environment variables are present
-        if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET || !process.env.SUPABASE_KEY) {
+        if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET || !process.env.SUPABASE_KEY || !process.env.SUPABASE_URL) {
             console.error('Missing environment variables!');
             res.status(500).send('Internal Server Error: Missing environment variables');
             return;
@@ -39,10 +32,6 @@ console.log('SUPABASE_URL:', process.env.SUPABASE_URL);
             const rawBody = await getRawBody(Readable.from(req));
             const sig = req.headers['stripe-signature'];
 
-            console.log('Raw body:', rawBody);
-            console.log('Stripe signature:', sig);
-
-            // Verify Stripe webhook signature
             let event;
             try {
                 event = stripe.webhooks.constructEvent(
@@ -56,43 +45,31 @@ console.log('SUPABASE_URL:', process.env.SUPABASE_URL);
                 return;
             }
 
-            console.log('Stripe event verified:', event.type);
-
             if (event.type === 'payment_intent.succeeded') {
                 const paymentIntent = event.data.object;
-                console.log('Payment intent object:', paymentIntent);
 
-                // Send data to Supabase
                 try {
-                    const response = await fetch(
-                        'https://mvlqlgpeqieuayciriij.supabase.co/rest/v1/Payments',
-                        {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'apikey': process.env.SUPABASE_KEY,
-                            },
-                            body: JSON.stringify({
-                                payment_id: paymentIntent.id,
-                                amount: paymentIntent.amount,
-                                currency: paymentIntent.currency,
-                                status: paymentIntent.status,
-                            }),
-                        }
-                    );
-
-                    const responseText = await response.text();
-                    console.log('Supabase Response Status:', response.status);
-                    console.log('Supabase Response Body:', responseText);
+                    const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/Payments`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'apikey': process.env.SUPABASE_KEY,
+                        },
+                        body: JSON.stringify({
+                            payment_id: paymentIntent.id,
+                            amount: paymentIntent.amount,
+                            currency: paymentIntent.currency,
+                            status: paymentIntent.status,
+                        }),
+                    });
 
                     if (!response.ok) {
-                        console.error('Supabase Error:', response.status, responseText);
+                        const errorText = await response.text();
+                        console.error('Supabase Insert Error:', response.status, errorText);
                         throw new Error('Failed to insert payment into Supabase');
                     }
-
-                    console.log('Payment successfully inserted into Supabase.');
                 } catch (err) {
-                    console.error('Error inserting into Supabase:', err.message);
+                    console.error('Supabase Error:', err.message);
                     res.status(500).send(`Supabase Insert Error: ${err.message}`);
                     return;
                 }
@@ -100,7 +77,6 @@ console.log('SUPABASE_URL:', process.env.SUPABASE_URL);
 
             res.status(200).send({ received: true });
         } else {
-            console.log('Received unsupported HTTP method:', req.method);
             res.status(405).send('Method Not Allowed');
         }
     } catch (err) {
