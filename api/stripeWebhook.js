@@ -1,14 +1,3 @@
-if (process.env.NODE_ENV !== 'production') {
-    require('dotenv').config();
-    console.log({
-    STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
-    STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
-    SUPABASE_KEY: process.env.SUPABASE_KEY,
-    SUPABASE_URL: process.env.SUPABASE_URL,
-});
-
-}
-
 import { Readable } from 'stream';
 import Stripe from 'stripe';
 
