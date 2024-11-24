@@ -1,3 +1,7 @@
+if (process.env.NODE_ENV !== 'production') {
+    require('dotenv').config();
+}
+
 import { Readable } from 'stream';
 import Stripe from 'stripe';
 
