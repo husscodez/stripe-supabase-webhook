@@ -1,6 +1,14 @@
 {
+  "name": "stripe-supabase-webhook",
+  "version": "1.0.0",
+  "description": "Webhook for handling Stripe events and inserting data into Supabase",
+  "main": "api/stripeWebhook.js",
+  "scripts": {
+    "start": "vercel dev"
+  },
   "dependencies": {
     "stripe": "^11.0.0",
     "node-fetch": "^2.6.7"
-  }
+  },
+  "license": "MIT"
 }
